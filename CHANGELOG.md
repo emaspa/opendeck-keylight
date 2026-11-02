@@ -2,6 +2,30 @@
 
 All notable changes to this plugin. Versions match `manifest.json` and the `vX.Y.Z` git tags.
 
+## 0.6.0
+
+### Added
+- Dial press and screen tap are configurable per dial. Each can turn the lights on or off,
+  switch the dial between brightness and colour temperature, reset the temperature, or do
+  nothing. Both dials share one settings page with separate brightness and temperature steps.
+  Dials set up before this keep their old behaviour and step.
+
+### Changed
+- New key and dial artwork. Keys show a dark card with a round button, a status lamp and a
+  bold label, and the button glows when the light is on. Set Brightness keys show their level
+  on a seven-segment display. Apply Scene keys light up when the lights already match the
+  scene. Dials show a half knob with a needle, a brightness bar or a warm-to-cool temperature
+  bar, and read OFF while the lights are off.
+- Colours follow the active [OpenXLR](https://github.com/emaspa/openxlr) skin when OpenXLR
+  is installed, and its Broadcast palette otherwise.
+- Action icons are flat dark tiles with a coloured glyph. `tools/icons.js` draws them and
+  replaces `icons/make_icons.py`. OpenDeck keeps the old icon path for actions placed before
+  this update, so place those again to get the new icons.
+- Temperature dials snap to the step size, so they read 5500K rather than 5537K.
+
+### Fixed
+- Dropdowns in the settings pages were white text on white.
+
 ## 0.5.3
 
 ### Changed
