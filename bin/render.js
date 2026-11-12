@@ -2,12 +2,21 @@
 /**
  * Key and dial artwork in the OpenXLR deck style: a skinned card with a
  * button cap, a status lamp and bold labels on keys, and a half-knob with a
- * needle and a level bar on dials. Colours come from the OpenXLR skin.
+ * needle and a level bar on dials. Colours come from the OpenXLR skin. A skin
+ * that draws unlit segment cells (one that sets Ox.Text.Ghost) turns keys and
+ * dial strips into a vacuum fluorescent display, as OpenXLR's own keys do.
  */
 
 const svgUri = (svg) => 'data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64');
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
+
+// Lettering in OpenXLR's segment face (segment-text.mjs). It is an ES module,
+// so the plugin loads it and hands it over; until then every skin draws the
+// ordinary artwork.
+let seg = null;
+function useSegments(module) { seg = module; }
+const isDisplay = (c) => !!seg && seg.segmented(c['Ox.Text.Ghost']);
 
 // Centred glyphs in a 144x144 box, coloured when drawn.
 const GLYPHS = {
@@ -74,6 +83,7 @@ function sevenSeg(text, x, y, h, color) {
  * label: up to two lines under the cap, '' for none
  */
 function keyImage(c, { on, known, glyph = null, badge = '', label = '' }) {
+	if (isDisplay(c)) return displayKeyImage(c, { on, known, glyph, badge, label });
 	const accent = known && on ? c['Ox.Led.On'] : null;
 	const ink = !known ? c['Ox.Text.Muted'] : accent || c['Ox.Text.Primary'];
 	const lines = label ? String(label).split('\n').slice(0, 2) : [];
@@ -123,6 +133,83 @@ function keyImage(c, { on, known, glyph = null, badge = '', label = '' }) {
 	</svg>`);
 }
 
+// A colour scaled toward black, for the glass under a display's lettering.
+function darken(hex, amount) {
+	const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+	return '#' + rgb.map((v) => Math.round(v * amount).toString(16).padStart(2, '0')).join('');
+}
+
+// The defs every display face shares: the halo lit lettering wears, the light
+// it spills into the glass, and the glass's fine mesh and sheen, as on
+// OpenXLR's display keys and the VFD Clock keys.
+function displayDefs(lit) {
+	return `
+		<filter id="halo" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3.5"/></filter>
+		<filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="2.5"/></filter>
+		<radialGradient id="spill" cx="72" cy="84" r="80" gradientUnits="userSpaceOnUse">
+			<stop stop-color="${lit}" stop-opacity="0.10"/><stop offset="1" stop-color="${lit}" stop-opacity="0"/>
+		</radialGradient>
+		<linearGradient id="sheen" x1="0" y1="0" x2="0" y2="72" gradientUnits="userSpaceOnUse">
+			<stop stop-color="#ffdcbe" stop-opacity="0.06"/><stop offset="1" stop-color="#ffdcbe" stop-opacity="0"/>
+		</linearGradient>
+		<pattern id="mesh" width="1.5" height="1.5" patternUnits="userSpaceOnUse">
+			<rect width="1.5" height="0.5" fill="#000" opacity="0.27"/><rect width="0.5" height="1.5" fill="#000" opacity="0.18"/>
+		</pattern>`;
+}
+
+// Something lit on the display: a soft halo of its own colour under it.
+const glowing = (inner, colour) =>
+	`<g filter="url(#halo)" opacity="0.8" color="${colour}" fill="${colour}">${inner}</g><g color="${colour}" fill="${colour}">${inner}</g>`;
+
+/**
+ * A key as a vacuum fluorescent display: near-black glass with a thin frame,
+ * the glyph lit with a halo while the light is on and dim while it is off,
+ * numbers and labels in the segment face over their unlit cells, a lamp
+ * segment in the corner, and the glass's mesh over everything.
+ */
+function displayKeyImage(c, { on, known, glyph, badge, label }) {
+	const ghost = c['Ox.Text.Ghost'];
+	const lit = c['Ox.Text.Primary'];
+	const unlit = c['Ox.Text.Muted'];
+	const accent = known && on ? c['Ox.Led.On'] : null;
+	// Off, the glyph is drawn dim so its shape still reads; unknown, only its unlit cells.
+	const ink = accent || (known ? unlit : ghost);
+	const lines = label ? String(label).split('\n').slice(0, 2) : [];
+	const capY = lines.length ? 52 : 66;
+
+	let face;
+	if (glyph) {
+		const shape = `<g transform="translate(72 ${capY}) scale(0.72) translate(-72 -72)">${GLYPHS[glyph]}</g>`;
+		face = accent ? glowing(shape, ink) : `<g color="${ink}" fill="${ink}">${shape}</g>`;
+	} else {
+		// A brightness level reads as a number with its unit, cell by cell.
+		const text = `${badge}%`;
+		const size = seg.fittedSize(text, 44, 112);
+		face = seg.segmentText(text, 72, capY + size / 2, size, { fill: ink, ghost, glow: accent ? 'halo' : null });
+	}
+
+	// The corner lamp is a small segment of the display.
+	const lampBar = `<rect x="110" y="18" width="16" height="6" rx="1"/>`;
+	const lamp = glyph ? (accent ? glowing(lampBar, accent) : `<g fill="${ghost}">${lampBar}</g>`) : '';
+
+	const labels = lines.map((line, i) => {
+		const size = line.length > 11 ? 19 : line.length > 8 ? 22 : 26;
+		const y = lines.length === 1 ? 126 : 106 + i * 24;
+		return seg.segmentText(line, 72, y - 2, seg.fittedSize(line, size * 0.8, 120),
+			{ fill: known ? lit : unlit, ghost, glow: known ? 'soft' : null });
+	}).join('');
+
+	return svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="288" height="288" viewBox="0 0 144 144">
+		<defs>${displayDefs(lit)}</defs>
+		<rect width="144" height="144" fill="${darken(ghost, 0.25)}"/>
+		<rect width="144" height="144" fill="url(#spill)"/>
+		<rect x="5" y="5" width="134" height="134" rx="16" fill="none" stroke="${darken(lit, 0.3)}" stroke-width="2"/>
+		${face}${lamp}${labels}
+		<rect width="144" height="144" fill="url(#mesh)"/>
+		<rect width="144" height="144" fill="url(#sheen)"/>
+	</svg>`);
+}
+
 // 24x24 glyph for the dial's corner slot.
 function dialIcon(c, glyph) {
 	return svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">` +
@@ -160,12 +247,59 @@ function kelvinBar(c, frac) {
 		${w > 0 ? `<rect width="${w}" height="6" rx="3" fill="url(#k)"/>` : ''}</svg>`);
 }
 
-// The dial title, bold like OpenXLR's; long names are squeezed to fit.
-const TITLE_W = 154, TITLE_H = 24, CHAR_W = 8.1;
+// The dial title, bold like OpenXLR's; long names are squeezed to fit. A
+// display letters it in the segment face over unlit cells.
+const TITLE_W = 154, TITLE_H = 24, CHAR_W = 8.1, SEGMENT_TITLE = 13;
 function dialTitle(c, text) {
+	if (isDisplay(c)) {
+		const size = seg.fittedSize(text, SEGMENT_TITLE, TITLE_W);
+		return svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="${TITLE_W}" height="${TITLE_H}" viewBox="0 0 ${TITLE_W} ${TITLE_H}">` +
+			seg.segmentText(text, 0, 18, size, { fill: c['Ox.Text.Primary'], ghost: c['Ox.Text.Ghost'], anchor: 'start' }) + '</svg>');
+	}
 	const fit = text.length * CHAR_W > TITLE_W ? ` textLength="${TITLE_W - 2}" lengthAdjust="spacingAndGlyphs"` : '';
 	return svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="${TITLE_W}" height="${TITLE_H}" viewBox="0 0 ${TITLE_W} ${TITLE_H}">` +
 		`<text x="0" y="17" font-family="sans-serif" font-size="14.5" font-weight="700" fill="${c['Ox.Text.Primary']}"${fit}>${esc(text)}</text></svg>`);
 }
 
-module.exports = { GLYPHS, keyImage, dialIcon, needle, levelBar, kelvinBar, dialTitle };
+// The width of a display strip's meter and value, layouts/dial-display.json.
+const DISPLAY_W = 168;
+// A display has no needle and no level bar above its reading.
+const EMPTY_NEEDLE = svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="${DISPLAY_W}" height="52"/>`);
+const EMPTY_METER = svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="${DISPLAY_W}" height="6"/>`);
+
+// A dial strip's glass and frame, the keys' display stretched to the strip.
+function displayStrip(c) {
+	const lit = c['Ox.Text.Primary'];
+	return svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="192" height="92" viewBox="0 0 192 92">
+		<defs>${displayDefs(lit)}</defs>
+		<rect width="192" height="92" rx="12" fill="${darken(c['Ox.Text.Ghost'], 0.25)}"/>
+		<rect width="192" height="92" rx="12" fill="url(#spill)"/>
+		<rect x="1" y="1" width="190" height="90" rx="11" fill="none" stroke="${darken(lit, 0.3)}" stroke-width="2"/>
+		<rect width="192" height="92" rx="12" fill="url(#mesh)"/>
+	</svg>`);
+}
+
+// The value as a display shows it: the reading in the segment face, and under
+// it a ladder of cells lit up to where the dial stands. Lit while the light is
+// on, dim while it is off.
+function displayDial(c, fraction, reading, active) {
+	const ghost = c['Ox.Text.Ghost'], lit = active ? c['Ox.Text.Primary'] : c['Ox.Text.Muted'];
+	const size = seg.fittedSize(reading, 22, DISPLAY_W - 4);
+	const text = seg.segmentText(reading, DISPLAY_W - 2, 28, size, { fill: lit, ghost, anchor: 'end', glow: active ? 'soft' : null });
+	const w = 3, gap = 2, cells = Math.floor((DISPLAY_W + gap) / (w + gap));
+	const x0 = Math.floor((DISPLAY_W - (cells * (w + gap) - gap)) / 2);
+	const on = Math.round(clamp01(fraction) * cells);
+	let litCells = '', dark = '';
+	for (let i = 0; i < cells; i++) {
+		const cell = `<rect x="${x0 + i * (w + gap)}" y="38" width="${w}" height="8"/>`;
+		if (i < on) litCells += cell; else dark += cell;
+	}
+	return svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="${DISPLAY_W}" height="52" viewBox="0 0 ${DISPLAY_W} 52">
+		<defs>${displayDefs(lit)}</defs>${text}<g fill="${ghost}">${dark}</g>${litCells ? glowing(litCells, lit) : ''}
+	</svg>`);
+}
+
+module.exports = {
+	GLYPHS, keyImage, dialIcon, needle, levelBar, kelvinBar, dialTitle,
+	useSegments, isDisplay, displayStrip, displayDial, EMPTY_NEEDLE, EMPTY_METER,
+};

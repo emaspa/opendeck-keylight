@@ -7,6 +7,8 @@
 
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const WebSocket = require('ws');
 const { KeyLights } = require('./keylights');
 const render = require('./render');
@@ -18,10 +20,19 @@ import('./skin-palette.mjs').then(({ SkinPalette }) => {
 	colours = skin.colours;
 	refreshVisuals();
 }).catch((e) => console.error('[keylight] skin palette unavailable:', e.message));
+// A skin with unlit segment cells draws keys and dials as a display, lettered
+// in OpenXLR's segment face.
+import('./segment-text.mjs').then((segments) => {
+	render.useSegments(segments);
+	refreshVisuals();
+}).catch((e) => console.error('[keylight] segment lettering unavailable:', e.message));
 
 // Contexts whose OpenDeck title is empty; those keys draw their own label.
 const emptyTitle = new Set();
 const DIAL_LAYOUT = 'layouts/dial.json';
+// A display has no knob or text beside its value, so its value and ladder take
+// the strip's whole width: a layout of its own.
+const DISPLAY_LAYOUT = 'layouts/dial-display.json';
 
 // --- CLI args from OpenDeck ---
 const args = process.argv.slice(2);
@@ -217,13 +228,14 @@ function dialFeedback(context, info, dev) {
 	const isAll = info.settings.deviceId === ALL;
 	const mode = dialMode(info);
 	if (!hasState(dev)) {
-		setFeedback(context, {
+		const value = dev ? '--' : 'no light';
+		setFeedback(context, dialStyle(context, {
 			title: render.dialTitle(colours, dev ? shortName(dev, info.settings) : missingLabel(info.settings)),
 			icon: render.dialIcon(colours, mode === 'temperature' ? 'thermo' : 'sun'),
-			value: dev ? '--' : 'no light', unit: '',
+			value, unit: '',
 			needle: render.needle(colours, 0), meter: render.levelBar(colours, 0),
 			muteOverlay: { enabled: false },
-		});
+		}, { fraction: 0, reading: value, active: false }));
 		return;
 	}
 	const title = render.dialTitle(colours, shortName(dev, info.settings));
@@ -233,25 +245,54 @@ function dialFeedback(context, info, dev) {
 		const b = turning ? info.localBrightness : dev.brightness;
 		// While off the dial reads OFF, unless it is being turned.
 		const showNumber = groupOn || turning;
-		setFeedback(context, {
+		setFeedback(context, dialStyle(context, {
 			title, icon: render.dialIcon(colours, 'sun'),
 			value: showNumber ? String(b) : 'OFF', unit: showNumber ? '%' : '',
 			needle: render.needle(colours, b / 100), meter: render.levelBar(colours, b / 100),
 			muteOverlay: { enabled: false },
-		});
+		}, { fraction: b / 100, reading: showNumber ? `${b}%` : 'OFF', active: groupOn }));
 	} else {
 		const turning = info.localK != null;
 		const k = turning ? info.localK : elgatoToK(dev.temperature);
 		const frac = (k - K_MIN) / (K_MAX - K_MIN);
 		// Off reads OFF here too, unless the dial is being turned.
 		const showNumber = groupOn || turning;
-		setFeedback(context, {
+		setFeedback(context, dialStyle(context, {
 			title, icon: render.dialIcon(colours, 'thermo'),
 			value: showNumber ? String(k) : 'OFF', unit: showNumber ? 'K' : '',
 			needle: render.needle(colours, frac), meter: render.kelvinBar(colours, frac),
 			muteOverlay: { enabled: false },
-		});
+		}, { fraction: frac, reading: showNumber ? `${k}K` : 'OFF', active: groupOn }));
 	}
+}
+
+// The strip's own images, as layouts/dial.json names them, sent back when a
+// skin stops drawing the strip as a display.
+const stripImage = (file) => 'data:image/svg+xml;base64,' +
+	fs.readFileSync(path.join(__dirname, '..', 'imgs', file)).toString('base64');
+const STRIP = { backgroundDial: stripImage('dialBackground.svg'), dial: stripImage('dial.svg') };
+// context -> the display a strip was last drawn as (its glass and lit colours), or '' for the knob.
+const dialLook = new Map();
+
+// A display skin draws a dial's strip as a display: the glass of its keys, a
+// ladder of cells lit up to the value in place of the knob and needle, and
+// the reading in the segment face in place of the strip's own text. Other
+// skins keep the layout's knob, needle and text.
+function dialStyle(context, payload, { fraction, reading, active }) {
+	const display = render.isDisplay(colours);
+	const look = display ? `${colours['Ox.Text.Ghost']} ${colours['Ox.Text.Primary']}` : '';
+	const was = dialLook.has(context) ? dialLook.get(context) : '';
+	dialLook.set(context, look);
+	// A dial appears in the manifest's layout, the knob's.
+	if ((was !== '') !== display)
+		send({ event: 'setFeedbackLayout', context, payload: { layout: display ? DISPLAY_LAYOUT : DIAL_LAYOUT } });
+	if (!display) return was !== '' ? { ...payload, ...STRIP } : payload;
+	return {
+		...payload, value: '', unit: '', needle: render.EMPTY_NEEDLE, meter: render.EMPTY_METER,
+		dial: render.displayDial(colours, fraction, reading, active),
+		// The glass only changes with the skin, so it is not resent on every turn.
+		...(was !== look ? { backgroundDial: render.displayStrip(colours) } : {}),
+	};
 }
 
 // Does the light already look like this scene?
@@ -494,6 +535,7 @@ ws.on('message', (raw) => {
 			// Dials placed before the layout existed still carry $B1.
 			if (payload && payload.controller === 'Encoder')
 				send({ event: 'setFeedbackLayout', context, payload: { layout: DIAL_LAYOUT } });
+			dialLook.delete(context);   // it appears in the knob's layout
 			updateVisual(context, actions.get(context));
 			break;
 		case 'titleParametersDidChange': {
@@ -507,6 +549,7 @@ ws.on('message', (raw) => {
 			actions.delete(context);
 			emptyTitle.delete(context);
 			pendingApply.delete(context);
+			dialLook.delete(context);
 			break;
 		case 'didReceiveSettings': {
 			const info = actions.get(context) || { action };

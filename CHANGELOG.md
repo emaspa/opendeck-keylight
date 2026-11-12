@@ -2,6 +2,16 @@
 
 All notable changes to this plugin. Versions match `manifest.json` and the `vX.Y.Z` git tags.
 
+## Unreleased
+
+### Added
+- Keys and dials draw as a vacuum fluorescent display while OpenXLR wears VFD Amber, VFD
+  Blue or VFD Classic, so they match OpenXLR's own keys. Keys show near-black glass with the
+  glyph lit while the light is on and dim while it is off. Labels and Set Brightness levels
+  are in segment lettering. Dial strips letter the title and reading the same way, over a
+  row of cells lit up to the value that runs the strip's full width. Other skins look as
+  before.
+
 ## 0.6.0
 
 ### Added

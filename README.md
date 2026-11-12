@@ -71,6 +71,10 @@ available (Debian/Ubuntu: `sudo apt install node-ws`).
 Both dials show live feedback on the touchscreen LCD strip — light name, current value,
 and a progress bar.
 
+Keys and dials take their colours from the active [OpenXLR](https://github.com/emaspa/openxlr)
+skin. With VFD Amber, VFD Blue or VFD Classic they draw as a vacuum fluorescent display
+in segment lettering, like OpenXLR's own keys.
+
 ### Keypad buttons
 
 | Action | Behaviour |
@@ -106,6 +110,12 @@ in Elgato Control Center.
 ├── package.json               Node deps (just `ws`)
 ├── bin/
 │   ├── plugin.js              Main plugin: WebSocket to OpenDeck, action handlers
+│   ├── render.js              Key and dial artwork, including the display style
+│   ├── skin-palette.mjs       Reads the OpenXLR skin (copied from OpenXLR)
+│   ├── skin-palettes.json     OpenXLR's skin colours (copied from OpenXLR)
+│   ├── segment-text.mjs       Segment lettering for display skins (copied from OpenXLR)
+│   ├── segment-font.json      The segment face as outlines (copied from OpenXLR)
+│   ├── segment-font-OFL.txt   Its licence: the face derives from DSEG, under the SIL OFL 1.1
 │   ├── keylights.js           Elgato HTTP client + device registry (discovery, cache, polling)
 │   └── mdns.js                Dependency-free mDNS browser for _elg._tcp
 ├── propertyInspector/         HTML config UIs shown in OpenDeck for each action
@@ -116,6 +126,7 @@ in Elgato Control Center.
 │   ├── scene.html
 │   ├── brightnessdial.html
 │   └── temperaturedial.html
+├── layouts/                   Dial strip layouts: the knob, and the full-width display
 ├── icons/                     PNG icons (key images, action list, category, plugin)
 ├── install.sh                 Install to OpenDeck plugins dir
 ├── build.sh                   Produce a distributable .streamDeckPlugin zip
