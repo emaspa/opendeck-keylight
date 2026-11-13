@@ -22,7 +22,7 @@ rsync -a \
 	--include='/icons/' --include='/icons/actions/' --include='/icons/actions/*.png' \
 	--include='/icons/*.png' \
 	--include='/manifest.json' --include='/manifest.linux.json' --include='/package.json' --include='/package-lock.json' \
-	--include='/README.md' --include='/LICENSE' --include='/CHANGELOG.md' \
+	--include='/README.md' --include='/LICENSE' --include='/LICENSE-MIT' --include='/CHANGELOG.md' \
 	--exclude='*' \
 	"$SCRIPT_DIR/" "$STAGE_DIR/"
 
