@@ -2,7 +2,7 @@
 
 All notable changes to this plugin. Versions match `manifest.json` and the `vX.Y.Z` git tags.
 
-## Unreleased
+## 0.7.0
 
 ### Added
 - Keys and dials draw as a vacuum fluorescent display while OpenXLR wears VFD Amber, VFD
@@ -11,6 +11,10 @@ All notable changes to this plugin. Versions match `manifest.json` and the `vX.Y
   are in segment lettering. Dial strips letter the title and reading the same way, over a
   row of cells lit up to the value that runs the strip's full width. Other skins look as
   before.
+
+### Changed
+- The fork is now licensed GPL-3.0-only, because it carries files copied from OpenXLR.
+  The upstream code stays under its MIT licence, whose notice ships as `LICENSE-MIT`.
 
 ## 0.6.0
 
