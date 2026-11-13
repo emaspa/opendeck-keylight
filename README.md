@@ -171,4 +171,4 @@ The plugin writes to stdout/stderr, captured by OpenDeck.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+This fork is distributed under GPL-3.0-only, see [LICENSE](LICENSE). The upstream code by Warren (dwot) is MIT, and its notice is kept in [LICENSE-MIT](LICENSE-MIT).
